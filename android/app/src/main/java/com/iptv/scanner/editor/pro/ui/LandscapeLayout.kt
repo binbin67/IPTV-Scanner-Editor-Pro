@@ -11,6 +11,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Brush
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -103,6 +104,14 @@ private val BOTTOM_BAR_HEIGHT = 72.dp
 private val ICON_SIZE = 22.dp
 private val ICON_BTN = 36.dp
 private val GESTURE_THRESHOLD = 30f
+
+// 酷9风格配色
+private val KU9_GRADIENT_START = Color(0xFF036D80) // 深青色
+private val KU9_GRADIENT_END = Color(0xFF052D49)   // 深蓝色
+private val KU9_ACCENT_GREEN = Color(0xFF70C439)   // 清新绿（数字选台/当前频道）
+private val KU9_ACCENT_CYAN = Color(0xFF00BCD4)    // 青色（加载动画/分组头）
+private val KU9_ICON_BG = Color(0x32FFFFFF)        // 半透明白色（图标背景）
+private val KU9_TIME_BG = Color(0x26000000)        // 半透明黑色（时间/网速背景）
 
 private enum class GestureFeedbackType { BRIGHTNESS, VOLUME, SEEK }
 
@@ -443,6 +452,11 @@ private fun LandscapeSideBar(viewModel: AppViewModel, hasEpg: Boolean, sidebarWi
     val oc = rememberPlayerOverlayColors()
 
     val isAndroid12Plus = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+    val ku9Gradient = Brush.linearGradient(
+        colors = listOf(KU9_GRADIENT_START, KU9_GRADIENT_END),
+        start = androidx.compose.ui.geometry.Offset(0f, Float.POSITIVE_INFINITY),
+        end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, 0f)
+    )
 
     Box(modifier = Modifier
             .fillMaxHeight()
@@ -450,16 +464,15 @@ private fun LandscapeSideBar(viewModel: AppViewModel, hasEpg: Boolean, sidebarWi
             .padding(bottom = BOTTOM_BAR_HEIGHT)
     ) {
         if (isAndroid12Plus) {
-            Box(modifier = Modifier.matchParentSize().blur(20.dp).background(oc.topBarBg.copy(alpha = 0.40f)))
+            Box(modifier = Modifier.matchParentSize().blur(20.dp).background(KU9_GRADIENT_START.copy(alpha = 0.40f)))
         }
-        Surface(
-            color = if (isAndroid12Plus) oc.topBarBg.copy(alpha = 0.25f) else oc.topBarBg.copy(alpha = 0.85f),
-            modifier = Modifier.matchParentSize()
+        Box(
+            modifier = Modifier.matchParentSize().background(ku9Gradient)
         ) {
             if (hasEpg) {
                 Row(modifier = Modifier.fillMaxSize()) {
                     LandscapeChannelColumn(viewModel = viewModel, modifier = Modifier.weight(1f))
-                    Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(oc.iconTint.copy(alpha = 0.15f)))
+                    Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Color(0x15FFFFFF)))
                     LandscapeEpgColumn(viewModel = viewModel, modifier = Modifier.weight(1f))
                 }
             } else {
@@ -563,10 +576,10 @@ private fun LandscapeChannelColumn(viewModel: AppViewModel, modifier: Modifier =
             groupedDisplay.forEach { (groupName, channels) ->
                 if (groupName.isNotEmpty()) {
                     stickyHeader {
-                        Surface(color = oc.topBarBg.copy(alpha = 0.95f)) {
+                        Surface(color = Color(0xCC000000)) {
                             Text(
                                 text = "$groupName (${channels.size})",
-                                color = oc.accent,
+                                color = KU9_ACCENT_CYAN,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp)
@@ -580,7 +593,7 @@ private fun LandscapeChannelColumn(viewModel: AppViewModel, modifier: Modifier =
                 val canCatchup = ch.catchup.isNotEmpty() && ch.catchup != "none"
                 Row(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))
-                        .then(if (isCurrent) Modifier.background(oc.accent.copy(alpha = 0.2f)) else Modifier)
+                        .then(if (isCurrent) Modifier.background(KU9_ACCENT_GREEN.copy(alpha = 0.2f)) else Modifier)
                         .clickable {
                             if (multiViewState.active) {
                                 viewModel.addChannelToMultiView(idx)
@@ -593,7 +606,7 @@ private fun LandscapeChannelColumn(viewModel: AppViewModel, modifier: Modifier =
                 ) {
                     if (ch.logo.isNotEmpty()) {
                         Box(
-                            modifier = Modifier.size(28.dp).clip(RoundedCornerShape(3.dp)).background(Color(0x22FFFFFF)),
+                            modifier = Modifier.size(28.dp).clip(RoundedCornerShape(3.dp)).background(KU9_ICON_BG),
                             contentAlignment = Alignment.Center
                         ) {
                             AsyncImage(model = ch.logo, contentDescription = ch.name, modifier = Modifier.fillMaxSize().padding(1.dp), contentScale = ContentScale.Fit)
@@ -601,14 +614,19 @@ private fun LandscapeChannelColumn(viewModel: AppViewModel, modifier: Modifier =
                         Spacer(modifier = Modifier.width(6.dp))
                     } else {
                         Box(
-                            modifier = Modifier.size(28.dp).clip(CircleShape).background(oc.accent.copy(alpha = 0.15f)),
+                            modifier = Modifier.size(28.dp).clip(RoundedCornerShape(3.dp)).background(KU9_ICON_BG),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = oc.accent, modifier = Modifier.size(14.dp))
+                            Text(
+                                text = ch.name.take(1).ifEmpty { "·" },
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                         Spacer(modifier = Modifier.width(6.dp))
                     }
-                    Text(text = ch.name, color = if (isCurrent) oc.accent else oc.textPrimary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(text = ch.name, color = if (isCurrent) KU9_ACCENT_GREEN else oc.textPrimary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     if (canCatchup) {
                         Icon(Icons.Default.History, contentDescription = "可回看", tint = oc.iconTintActive, modifier = Modifier.size(12.dp))
                         Spacer(modifier = Modifier.width(3.dp))
@@ -770,6 +788,13 @@ private fun LandscapeBottomBar(
             ) {
                 if (channel != null && channel.logo.isNotEmpty()) {
                     AsyncImage(model = channel.logo, contentDescription = channel.name, modifier = Modifier.fillMaxSize().padding(2.dp), contentScale = ContentScale.Fit)
+                } else if (channel != null) {
+                    Text(
+                        text = channel.name.take(1).ifEmpty { "·" },
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 } else {
                     Icon(Icons.Default.PlayArrow, contentDescription = null, tint = oc.accent, modifier = Modifier.size(20.dp))
                 }
@@ -783,19 +808,33 @@ private fun LandscapeBottomBar(
                         text = channel?.name?.ifEmpty { null } ?: "未选择频道",
                         color = if (channel != null) oc.textPrimary else oc.textSecondary,
                         fontSize = 14.sp, fontWeight = FontWeight.Medium,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
+                    // 酷9风格：时间显示（HH:mm E，半透明黑底圆角）
+                    val timeText = remember(tick) {
+                        val cal = java.util.Calendar.getInstance()
+                        val timeFmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                        val weekFmt = java.text.SimpleDateFormat("E", java.util.Locale.CHINESE)
+                        "${timeFmt.format(cal.time)} ${weekFmt.format(cal.time)}"
+                    }
+                    Surface(color = KU9_TIME_BG, shape = RoundedCornerShape(10.dp)) {
+                        Text(
+                            text = timeText,
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
                     if (currentProgram != null && currentProgram.desc.isNotEmpty()) {
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = currentProgram.desc,
                             color = oc.textSecondary.copy(alpha = 0.7f),
                             fontSize = 10.sp,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
+                            maxLines = 1, overflow = TextOverflow.Ellipsis
                         )
-                    } else {
-                        Spacer(modifier = Modifier.weight(1f))
                     }
                     if (showExitCatchup) {
                         Surface(color = oc.accent.copy(alpha = 0.2f), shape = RoundedCornerShape(3.dp)) {
