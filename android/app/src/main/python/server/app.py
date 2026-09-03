@@ -95,22 +95,13 @@ class IPTVServer:
     def _run_loop(self):
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
-
-        def _safe_async_exception_handler(loop, context):
-            msg = context.get('message', 'Asyncio异常')
-            exception = context.get('exception')
-            if exception is not None:
-                logger.error("Asyncio: %s: %s", msg, exception, exc_info=False)
-            else:
-                logger.error("Asyncio: %s", msg)
-
-        self._loop.set_exception_handler(_safe_async_exception_handler)
         try:
             self._loop.run_until_complete(self._async_start())
             self._loop.run_forever()
         except Exception as e:
-            logger.error(f"Server运行异常: {e}", exc_info=False)
+            logger.error(f"Server运行异常: {e}", exc_info=True)
         finally:
+            # 确保 _running 标志在异常退出时也被重置，否则 stop() 会卡死
             self._running = False
             try:
                 self._loop.close()
