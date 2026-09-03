@@ -1058,15 +1058,7 @@ class AppStyles:
                           cls._radio_cache, cls._spinup_cache, cls._spindown_cache,
                           cls._sort_up_cache, cls._sort_down_cache):
                 cache.clear()
-        try:
-            if os.path.isdir(_SVG_TMPDIR):
-                for f in os.listdir(_SVG_TMPDIR):
-                    try:
-                        os.remove(os.path.join(_SVG_TMPDIR, f))
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+
 
     @staticmethod
     def get_theme():
