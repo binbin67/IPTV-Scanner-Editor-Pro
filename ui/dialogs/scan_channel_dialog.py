@@ -4,7 +4,12 @@
 
 import os
 import time
+import warnings
 from PySide6 import QtWidgets, QtCore, QtGui
+try:
+    from shiboken6 import isValid as _shiboken_is_valid
+except ImportError:
+    _shiboken_is_valid = None
 
 # 导入自定义模块
 from models.channel_model import ChannelListModel
@@ -2547,10 +2552,14 @@ class ScanChannelDialog(FloatingDialog):
         """模型切换后重新连接selectionModel信号"""
         sel_model = self.channel_list.selectionModel()
         if sel_model:
-            try:
-                sel_model.selectionChanged.disconnect(self._on_channel_selected)
-            except (RuntimeError, TypeError):
-                pass
+            if _shiboken_is_valid and not _shiboken_is_valid(sel_model):
+                return
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                try:
+                    sel_model.selectionChanged.disconnect(self._on_channel_selected)
+                except (RuntimeError, TypeError):
+                    pass
             sel_model.selectionChanged.connect(self._on_channel_selected)
 
     def _set_buttons_during_scan(self, is_scanning: bool):

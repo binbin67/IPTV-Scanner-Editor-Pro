@@ -404,6 +404,7 @@ class MpvPlayerController(QObject):
                 _mpv_mod.libmpv.mpv_request_log_messages(self.mpv_handle, _log_request_level)
             except Exception as _e:
                 self.logger.debug(f"mpv_request_log_messages 调用失败: {_e}")
+            _mpv_set_property_string(self.mpv_handle, 'terminal', 'no')
             _mpv_set_property_string(self.mpv_handle, 'no-window-dragging', 'yes')
             _mpv_set_property_string(self.mpv_handle, 'window-scale', '1.0')
             _mpv_set_property_string(self.mpv_handle, 'border', 'no')
