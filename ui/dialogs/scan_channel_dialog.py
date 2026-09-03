@@ -818,10 +818,10 @@ class ScanChannelDialog(FloatingDialog):
         self.address_example_label = address_example_label
         address_example_label.setWordWrap(True)
         address_example_label.setStyleSheet(AppStyles.hint_label_style())
-        address_example_label.setMinimumHeight(40)
+        address_example_label.setMinimumHeight(28)
 
         address_section.addWidget(address_example_label)
-        self.ip_range_input.setMinimumHeight(48)
+        self.ip_range_input.setMinimumHeight(36)
         self.ip_range_input.text_edit.setStyleSheet(AppStyles.url_range_input_style())
         address_section.addWidget(self.ip_range_input)
 
@@ -916,6 +916,26 @@ class ScanChannelDialog(FloatingDialog):
         # 设置表头属性
         self.header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Interactive)
         self.header.setDefaultSectionSize(100)
+
+        # 各列默认列宽
+        _col_widths = {
+            ChannelListModel.COL_INDEX: 45,          # 序号
+            ChannelListModel.COL_NAME: 200,          # 频道名称（加宽）
+            ChannelListModel.COL_RESOLUTION: 80,     # 分辨率
+            ChannelListModel.COL_URL: 200,           # URL
+            ChannelListModel.COL_GROUP: 90,          # 分组
+            ChannelListModel.COL_LOGO: 60,           # 台标
+            ChannelListModel.COL_STATUS: 60,         # 状态（窄）
+            ChannelListModel.COL_LATENCY: 55,        # 延迟（窄）
+            ChannelListModel.COL_TVG_ID: 70,         # TVG-ID（窄）
+            ChannelListModel.COL_TVG_CHNO: 60,       # TVG频道号（窄）
+            ChannelListModel.COL_TVG_SHIFT: 60,      # TVG时移（窄）
+            ChannelListModel.COL_CATCHUP: 60,        # 回看
+            ChannelListModel.COL_CATCHUP_DAYS: 60,   # 回看天数（窄）
+            ChannelListModel.COL_CATCHUP_SOURCE: 100, # 回看源
+        }
+        for col, width in _col_widths.items():
+            self.header.resizeSection(col, width)
 
         # 启用表头点击排序
         self.header.setSectionsClickable(True)

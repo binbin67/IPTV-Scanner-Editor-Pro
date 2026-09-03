@@ -250,8 +250,7 @@ Row(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
                     selectedProgram = null
                 },
                 onOsd = {
-                    // 切换控制层持久模式（pin/unpin），关闭面板
-                    viewModel.setLandscapeSidebarVisible(false)
+                    // 切换控制层持久模式（pin/unpin），不关闭面板以便再次点击关闭
                     viewModel.toggleControlsPinned()
                 },
                 modifier = Modifier.width(72.dp)

@@ -360,6 +360,11 @@ class EventHandler:
                     if hasattr(w, 'media_ctrl'):
                         w.media_ctrl.frame_step()
                     return True
+                # 静音切换（J）
+                elif key == Qt.Key.Key_J:
+                    if hasattr(w, 'toggle_mute'):
+                        w.toggle_mute()
+                    return True
 
             elif modifiers == Qt.KeyboardModifier.ControlModifier:
                 if key == Qt.Key.Key_O:
@@ -376,10 +381,6 @@ class EventHandler:
                 elif key == Qt.Key.Key_U:
                     if hasattr(w, '_open_stream'):
                         w._open_stream()
-                    return True
-                elif key == Qt.Key.Key_J:
-                    if hasattr(w, 'toggle_mute'):
-                        w.toggle_mute()
                     return True
 
 

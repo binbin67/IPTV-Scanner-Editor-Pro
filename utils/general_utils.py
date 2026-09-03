@@ -512,8 +512,12 @@ def setup_i18n_context_menu(widget, language_manager=None):
 
         is_read_only = widget.isReadOnly()
         has_selection = widget.textCursor().hasSelection() if hasattr(widget, 'textCursor') else widget.hasSelectedText()
-        can_undo = widget.document().isUndoAvailable() if hasattr(widget, 'document') else False
-        can_redo = widget.document().isRedoAvailable() if hasattr(widget, 'document') else False
+        if hasattr(widget, 'document'):
+            can_undo = widget.document().isUndoAvailable()
+            can_redo = widget.document().isRedoAvailable()
+        else:
+            can_undo = widget.isUndoAvailable() if hasattr(widget, 'isUndoAvailable') else False
+            can_redo = widget.isRedoAvailable() if hasattr(widget, 'isRedoAvailable') else False
         clipboard_text = ''
         try:
             from PySide6.QtWidgets import QApplication
