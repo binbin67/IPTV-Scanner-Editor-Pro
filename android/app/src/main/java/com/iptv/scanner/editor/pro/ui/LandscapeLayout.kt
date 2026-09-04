@@ -457,6 +457,8 @@ private fun LandscapeSideBar(viewModel: AppViewModel, hasEpg: Boolean, sidebarWi
         start = androidx.compose.ui.geometry.Offset(0f, Float.POSITIVE_INFINITY),
         end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, 0f)
     )
+    // 酷9风格：EPG折叠展示，默认不展开
+    var epgExpanded by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier
             .fillMaxHeight()
@@ -469,14 +471,14 @@ private fun LandscapeSideBar(viewModel: AppViewModel, hasEpg: Boolean, sidebarWi
         Box(
             modifier = Modifier.matchParentSize().background(ku9Gradient)
         ) {
-            if (hasEpg) {
+            if (hasEpg && epgExpanded) {
                 Row(modifier = Modifier.fillMaxSize()) {
-                    LandscapeChannelColumn(viewModel = viewModel, modifier = Modifier.weight(1f))
+                    LandscapeChannelColumn(viewModel = viewModel, modifier = Modifier.weight(1f), onToggleEpg = { epgExpanded = !epgExpanded }, epgExpanded = epgExpanded)
                     Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Color(0x15FFFFFF)))
                     LandscapeEpgColumn(viewModel = viewModel, modifier = Modifier.weight(1f))
                 }
             } else {
-                LandscapeChannelColumn(viewModel = viewModel, modifier = Modifier.fillMaxWidth())
+                LandscapeChannelColumn(viewModel = viewModel, modifier = Modifier.fillMaxWidth(), onToggleEpg = if (hasEpg) { { epgExpanded = !epgExpanded } } else null, epgExpanded = false)
             }
         }
     }
@@ -484,7 +486,12 @@ private fun LandscapeSideBar(viewModel: AppViewModel, hasEpg: Boolean, sidebarWi
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun LandscapeChannelColumn(viewModel: AppViewModel, modifier: Modifier = Modifier) {
+private fun LandscapeChannelColumn(
+    viewModel: AppViewModel,
+    modifier: Modifier = Modifier,
+    onToggleEpg: (() -> Unit)? = null,
+    epgExpanded: Boolean = false
+) {
     val oc = rememberPlayerOverlayColors()
     val channelTab by viewModel.channelsTab.collectAsState()
     val channels by viewModel.channels.collectAsState()
@@ -536,6 +543,20 @@ private fun LandscapeChannelColumn(viewModel: AppViewModel, modifier: Modifier =
                 )
             }
             Spacer(modifier = Modifier.weight(1f))
+            // 酷9风格：EPG折叠/展开切换按钮
+            if (onToggleEpg != null) {
+                IconButton(
+                    onClick = onToggleEpg,
+                    modifier = Modifier.size(28.dp).tvFocusBorder()
+                ) {
+                    Icon(
+                        Icons.Default.Schedule,
+                        contentDescription = if (epgExpanded) "收起节目单" else "展开节目单",
+                        tint = if (epgExpanded) KU9_ACCENT_CYAN else oc.iconTint,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
             IconButton(
                 onClick = { showSearch = !showSearch; if (!showSearch) searchQuery = "" },
                 modifier = Modifier.size(28.dp).tvFocusBorder()
@@ -604,6 +625,15 @@ private fun LandscapeChannelColumn(viewModel: AppViewModel, modifier: Modifier =
                         .padding(horizontal = 6.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // 酷9风格：序号显示
+                    Text(
+                        text = "${idx + 1}",
+                        color = if (isCurrent) KU9_ACCENT_GREEN else oc.textSecondary,
+                        fontSize = 10.sp,
+                        modifier = Modifier.width(24.dp),
+                        textAlign = androidx.compose.ui.text.TextAlign.End
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                     if (ch.logo.isNotEmpty()) {
                         Box(
                             modifier = Modifier.size(28.dp).clip(RoundedCornerShape(3.dp)).background(KU9_ICON_BG),
