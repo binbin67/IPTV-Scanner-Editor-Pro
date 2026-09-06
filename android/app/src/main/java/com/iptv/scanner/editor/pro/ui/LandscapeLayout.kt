@@ -631,7 +631,7 @@ private fun LandscapeChannelColumn(
                         color = if (isCurrent) KU9_ACCENT_GREEN else oc.textSecondary,
                         fontSize = 10.sp,
                         modifier = Modifier.width(24.dp),
-                        textAlign = androidx.compose.ui.text.TextAlign.End
+                        textAlign = TextAlign.End
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     if (ch.logo.isNotEmpty()) {

@@ -646,6 +646,16 @@ def init_context(ext_files_dir='', files_dir='', log_level='info', native_lib_di
 
             ServerContext.get_instance(main_window=None)
 
+            try:
+                _ctx = ServerContext.get_instance(main_window=None)
+                _sm = _ctx.get_epg_parser()
+                if _sm and _sm.load_cached_epg_data():
+                    _log('init_context: EPG cache loaded from disk')
+                else:
+                    _log('init_context: no EPG cache found, will download later')
+            except Exception as _e:
+                _log(f'init_context: load EPG cache failed: {_e}', 'W')
+
             _log('init_context: ServerContext initialized (standalone mode)')
             _inited = True
             return 'OK'

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,8 +20,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -51,16 +54,22 @@ import androidx.compose.material.icons.filled.SyncAlt
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VideoSettings
 import androidx.compose.material.icons.filled.ViewInAr
+import androidx.compose.material.icons.filled.ViewModule
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Web
 import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,6 +82,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.iptv.scanner.editor.pro.ui.theme.tvFocusBorder
+
+private val KU9_ACCENT_CYAN = Color(0xFF00BCD4)
 
 /**
  * 主菜单面板：与 PC 端主菜单（panelMenu）对齐。
@@ -92,6 +103,17 @@ fun MainMenuPanel(viewModel: AppViewModel) {
     val currentChannel by viewModel.currentChannel.collectAsState()
     val currentIdx by viewModel.currentIdx.collectAsState()
     val favorites by viewModel.favorites.collectAsState()
+    val ku9ShowTime by viewModel.ku9ShowTime.collectAsState()
+    val ku9ShowNetSpeed by viewModel.ku9ShowNetSpeed.collectAsState()
+    val ku9HideChannelNum by viewModel.ku9HideChannelNum.collectAsState()
+    val ku9DisableEpg by viewModel.ku9DisableEpg.collectAsState()
+    val ku9DisableFavorite by viewModel.ku9DisableFavorite.collectAsState()
+    val ku9ShowListIcon by viewModel.ku9ShowListIcon.collectAsState()
+    val ku9ShowBottomIcon by viewModel.ku9ShowBottomIcon.collectAsState()
+    val isTv = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val sources by viewModel.sources.collectAsState()
+    val selectedSource by viewModel.selectedSource.collectAsState()
+    val multiViewState by viewModel.multiViewState.collectAsState()
 
     val isFavorite = currentIdx >= 0 && favorites.contains(currentIdx)
 
@@ -108,7 +130,7 @@ fun MainMenuPanel(viewModel: AppViewModel) {
         if (uri != null) viewModel.playLocalVideo(uri.toString())
     }
 
-    val sections = remember(currentIdx, isFavorite) {
+    val sections = remember(currentIdx, isFavorite, ku9ShowTime, ku9ShowNetSpeed, ku9HideChannelNum, ku9DisableEpg, ku9DisableFavorite, ku9ShowListIcon, ku9ShowBottomIcon, sources, selectedSource, multiViewState) {
         buildMenuSections(
             onOpenPlaylist = {
                 if (!viewModel.isSafAvailable()) {
@@ -243,11 +265,141 @@ fun MainMenuPanel(viewModel: AppViewModel) {
                 viewModel.toggleMenuPanel()
                 viewModel.refreshUi()
             },
+            onSelectSource = { url ->
+                viewModel.setSelectedSource(url)
+                viewModel.toggleMenuPanel()
+                viewModel.refreshUi()
+            },
+            onToggleShowTime = { viewModel.setKu9ShowTime(!ku9ShowTime) },
+            onToggleShowNetSpeed = { viewModel.setKu9ShowNetSpeed(!ku9ShowNetSpeed) },
+            onToggleHideChannelNum = { viewModel.setKu9HideChannelNum(!ku9HideChannelNum) },
+            onToggleDisableEpg = { viewModel.setKu9DisableEpg(!ku9DisableEpg) },
+            onToggleDisableFavorite = { viewModel.setKu9DisableFavorite(!ku9DisableFavorite) },
+            onToggleShowListIcon = { viewModel.setKu9ShowListIcon(!ku9ShowListIcon) },
+            onToggleShowBottomIcon = { viewModel.setKu9ShowBottomIcon(!ku9ShowBottomIcon) },
+            showTime = ku9ShowTime,
+            showNetSpeed = ku9ShowNetSpeed,
+            hideChannelNum = ku9HideChannelNum,
+            disableEpg = ku9DisableEpg,
+            disableFavorite = ku9DisableFavorite,
+            showListIcon = ku9ShowListIcon,
+            showBottomIcon = ku9ShowBottomIcon,
             hasCurrentChannel = currentChannel != null,
-            isFavorite = isFavorite
+            isFavorite = isFavorite,
+            sources = sources,
+            selectedSource = selectedSource,
+            multiViewActive = multiViewState.active,
+            currentMultiViewLayout = if (multiViewState.active) multiViewState.layout else null,
+            onEnterMultiView = { layout ->
+                viewModel.toggleMenuPanel()
+                viewModel.enterMultiView(layout)
+            },
+            onExitMultiView = {
+                viewModel.toggleMenuPanel()
+                viewModel.exitMultiView()
+            }
         )
     }
 
+    // 横屏模式：酷9风格右侧两列浮动菜单（单圆角矩形包含两列）
+    if (isTv) {
+        var selectedSectionIdx by remember { mutableStateOf(0) }
+        val safeIdx = selectedSectionIdx.coerceIn(0, sections.lastIndex)
+        val currentSection = sections.getOrNull(safeIdx)
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            // 单个圆角矩形包含两列
+            Surface(
+                color = Color(0x80222222),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .fillMaxHeight()
+                    .padding(end = 16.dp, top = 10.dp, bottom = 80.dp)
+            ) {
+                Row(modifier = Modifier.wrapContentWidth()) {
+                    // 左列：子菜单（当前选中section的entries）
+                    if (currentSection != null && currentSection.entries.isNotEmpty()) {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxHeight().width(150.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 6.dp)
+                        ) {
+                            items(
+                                items = currentSection.entries,
+                                key = { entry -> currentSection.title + "_" + entry.title }
+                            ) { entry ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (entry.highlight) Color(0xFF2979FF) else Color.Transparent)
+                                        .tvFocusBorder()
+                                        .clickable { entry.onClick() }
+                                        .padding(horizontal = 12.dp, vertical = 11.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = entry.title,
+                                        color = if (entry.highlight) Color.White else Color(0xE6FFFFFF),
+                                        fontSize = 15.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    if (entry.isToggle) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .background(if (entry.toggleValue) Color(0xFF2979FF) else Color(0x60FFFFFF))
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        // 列间分隔线
+                        Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Color(0x40FFFFFF)))
+                    }
+
+                    // 右列：主菜单（section titles）
+                    LazyColumn(
+                        modifier = Modifier.fillMaxHeight().width(130.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 6.dp)
+                    ) {
+                        itemsIndexed(sections) { idx, section ->
+                            val isSelected = idx == safeIdx
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isSelected) Color(0xFF2979FF) else Color.Transparent)
+                                    .tvFocusBorder()
+                                    .clickable { selectedSectionIdx = idx }
+                                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = section.title,
+                                    color = if (isSelected) Color.White else Color(0xE6FFFFFF),
+                                    fontSize = 16.sp,
+                                    fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+        }
+        return
+    }
+
+    // PHONE模式：原有全屏覆盖菜单
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useDualColumn = maxWidth > 500.dp
 
@@ -391,7 +543,7 @@ private fun MenuGridItem(
             Spacer(modifier = Modifier.height(4.dp))
             // 标题
             Text(
-                text = entry.title,
+                text = if (entry.isToggle) "${entry.title}: ${if (entry.toggleValue) "开" else "关"}" else entry.title,
                 color = if (entry.highlight) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface,
                 fontSize = 11.sp,
                 fontWeight = if (entry.highlight) FontWeight.Medium else FontWeight.Normal,
@@ -412,7 +564,9 @@ private data class MenuEntry(
     val title: String,
     val subtitle: String,
     val onClick: () -> Unit,
-    val highlight: Boolean = false
+    val highlight: Boolean = false,
+    val isToggle: Boolean = false,
+    val toggleValue: Boolean = false
 )
 
 private data class MenuSection(
@@ -452,71 +606,137 @@ private fun buildMenuSections(
     onSaveAs: () -> Unit,
     onRecent: () -> Unit,
     onRefresh: () -> Unit,
+    onSelectSource: (String) -> Unit,
+    onToggleShowTime: () -> Unit,
+    onToggleShowNetSpeed: () -> Unit,
+    onToggleHideChannelNum: () -> Unit,
+    onToggleDisableEpg: () -> Unit,
+    onToggleDisableFavorite: () -> Unit,
+    onToggleShowListIcon: () -> Unit,
+    onToggleShowBottomIcon: () -> Unit,
+    showTime: Boolean,
+    showNetSpeed: Boolean,
+    hideChannelNum: Boolean,
+    disableEpg: Boolean,
+    disableFavorite: Boolean,
+    showListIcon: Boolean,
+    showBottomIcon: Boolean,
     hasCurrentChannel: Boolean,
-    isFavorite: Boolean
+    isFavorite: Boolean,
+    sources: List<com.iptv.scanner.editor.pro.data.IptvSource>,
+    selectedSource: String,
+    multiViewActive: Boolean = false,
+    currentMultiViewLayout: MultiViewLayout? = null,
+    onEnterMultiView: (MultiViewLayout) -> Unit = {},
+    onExitMultiView: () -> Unit = {}
 ): List<MenuSection> {
-    val quickSection = MenuSection(
-        title = "快捷",
+
+    // 酷9风格分组：订阅源 = 订阅源列表 + 管理入口
+    val sourceEntries = mutableListOf<MenuEntry>()
+    sources.filter { it.enabled }.forEachIndexed { idx, src ->
+        val name = src.name.ifEmpty { "源${idx + 1}" }
+        sourceEntries.add(MenuEntry(
+            Icons.Default.Web, name, src.url.take(40),
+            { onSelectSource(src.url) },
+            highlight = src.url == selectedSource
+        ))
+    }
+    sourceEntries.add(MenuEntry(Icons.Default.Settings, "订阅源管理", "添加、编辑、删除 M3U 订阅源", onSources))
+    val lineSection = MenuSection(title = "订阅源", entries = sourceEntries)
+
+    // 多画面分组
+    val multiViewEntries = mutableListOf<MenuEntry>()
+    if (multiViewActive && currentMultiViewLayout != null) {
+        val otherLayout = when (currentMultiViewLayout) {
+            MultiViewLayout.DUAL -> MultiViewLayout.QUAD
+            MultiViewLayout.QUAD -> MultiViewLayout.NINE
+            MultiViewLayout.NINE -> MultiViewLayout.DUAL
+            else -> MultiViewLayout.DUAL
+        }
+        multiViewEntries.add(MenuEntry(Icons.Default.ViewModule, "切换为${otherLayout.displayName}", "当前 ${currentMultiViewLayout.displayName}", { onEnterMultiView(otherLayout) }))
+        multiViewEntries.add(MenuEntry(Icons.AutoMirrored.Filled.ExitToApp, "退出多画面", "退出多画面模式", onExitMultiView, highlight = true))
+    } else {
+        multiViewEntries.add(MenuEntry(Icons.Default.ViewModule, "双画面", "左右分屏", { onEnterMultiView(MultiViewLayout.DUAL) }))
+        multiViewEntries.add(MenuEntry(Icons.Default.GridView, "四画面", "2x2 网格", { onEnterMultiView(MultiViewLayout.QUAD) }))
+        multiViewEntries.add(MenuEntry(Icons.Default.GridView, "九画面", "3x3 网格", { onEnterMultiView(MultiViewLayout.NINE) }))
+    }
+    val multiViewSection = MenuSection(title = "多画面", entries = multiViewEntries)
+
+    val playbackSettingsSection = MenuSection(
+        title = "播放设置",
+        entries = listOf(
+            MenuEntry(Icons.Default.Settings, "播放器设置", "内核 / VO / HWDEC / HDR", onSettings),
+            MenuEntry(Icons.Default.ClosedCaption, "字幕", "轨 / 显示 / 延迟 / 缩放", onSubtitle),
+            MenuEntry(Icons.Default.VideoSettings, "视频", "图像调整 / 旋转 / 翻转", onVideo),
+            MenuEntry(Icons.Default.Equalizer, "音频", "音轨 / 延迟 / EQ / 音调", onAudio),
+            MenuEntry(Icons.Default.PlayCircle, "播放", "速度 / 循环 / 随机 / AB", onPlayback)
+        )
+    )
+    val channelSection = MenuSection(
+        title = "频道管理",
         entries = listOf(
             MenuEntry(Icons.AutoMirrored.Filled.ListAlt, "频道列表", "订阅 / 本地 / 收藏 / 历史", onChannels, highlight = true),
-            MenuEntry(Icons.Default.CalendarMonth, "节目单 EPG", "当前频道节目 / 日期切换 / 提醒", onEpg, highlight = true)
-        )
-    )
-
-    val fileSection = MenuSection(
-        title = "文件",
-        entries = listOf(
-            MenuEntry(Icons.Default.FileOpen, "打开播放列表", "选择设备上的 M3U/M3U8 文件", onOpenPlaylist),
-            MenuEntry(Icons.Default.Link, "打开网络流", "输入 M3U/M3U8 订阅源 URL", onOpenUrl),
-            MenuEntry(Icons.Default.Movie, "打开本地文件", "播放设备上的视频/音频文件", onOpenLocalVideo),
-            MenuEntry(Icons.Default.History, "最近打开", "最近打开的播放列表/网络流/视频", onRecent),
-            MenuEntry(Icons.Default.Web, "订阅源管理", "添加、编辑、删除 M3U 订阅源", onSources),
-            MenuEntry(Icons.Default.CalendarMonth, "EPG 订阅源", "管理节目单订阅地址（XMLTV）", onEpgSources),
+            MenuEntry(Icons.Default.CalendarMonth, "节目单 EPG", "当前频道节目 / 日期切换", onEpg),
             MenuEntry(Icons.Default.SyncAlt, "频道映射", "远程映射 + 用户映射管理", onMapping),
-            MenuEntry(Icons.Default.FileDownload, "另存为 M3U", "导出当前频道列表到下载目录", onSaveAs),
-            MenuEntry(Icons.Default.Refresh, "刷新", "重新加载频道和 EPG", onRefresh)
-        )
-    )
-
-    val playbackSection = MenuSection(
-        title = "播放",
-        entries = listOf(
-            MenuEntry(Icons.Default.ClosedCaption, "字幕", "轨 / 显示 / 延迟 / 缩放 / 位置 / 样式 / 加载", onSubtitle),
-            MenuEntry(Icons.Default.VideoSettings, "视频", "图像调整 / 旋转 / 翻转 / 3D 360", onVideo),
-            MenuEntry(Icons.Default.Equalizer, "音频", "音轨 / 延迟 / EQ / 音调", onAudio),
-            MenuEntry(Icons.Default.PlayCircle, "播放", "速度 / 循环 / 随机 / AB / 逐帧 / 章节", onPlayback),
-            MenuEntry(Icons.Default.ScreenshotMonitor, "截图", "单张 / 连拍 / 含字幕 / 含 OSD", onScreenshot),
-            MenuEntry(Icons.Default.GraphicEq, "A/V 同步监控", "实时数值 / 波形 / 延迟调整", onAvsync),
-            MenuEntry(Icons.Default.Public, "网络增强", "Referer / Proxy / Headers", onNetwork),
-            MenuEntry(Icons.Default.Tune, "工具", "搜索 / EPG时间线 / 提醒 / 续播 / 书签 / 映射 / 扫描 / 流质量", onTools),
-            MenuEntry(Icons.Default.PictureInPicture, "画中画", "进入 PiP 小窗口播放", onPip),
-            MenuEntry(Icons.Default.ContentCut, "切片导出", "裁剪视频片段 / GIF / MP3", onClipExport),
-            MenuEntry(Icons.Default.GraphicEq, "音频可视化", "实时频谱波形", onAudioVisualizer),
-            MenuEntry(Icons.Default.MusicNote, "歌词", "加载 LRC / 同步高亮", onLyrics),
-            MenuEntry(Icons.Default.ViewInAr, "视图", "视频比例 / OSD", onView),
-            MenuEntry(Icons.Default.Settings, "设置", "播放器内核 / VO / HWDEC / HDR", onSettings),
-            MenuEntry(Icons.Default.Info, "关于", "版本信息 / 功能特性", onAbout),
             MenuEntry(
                 Icons.Default.Favorite,
                 if (isFavorite) "取消收藏" else "收藏",
                 if (hasCurrentChannel) "当前频道" else "未选择频道",
                 onToggleFavorite,
                 highlight = hasCurrentChannel
-            ),
+            )
+        )
+    )
+    val subscribeSection = MenuSection(
+        title = "订阅管理",
+        entries = listOf(
+            MenuEntry(Icons.Default.CalendarMonth, "EPG 订阅源", "管理节目单订阅地址", onEpgSources),
+            MenuEntry(Icons.Default.Link, "打开网络流", "输入 M3U/M3U8 URL", onOpenUrl),
+            MenuEntry(Icons.Default.FileOpen, "打开播放列表", "选择 M3U/M3U8 文件", onOpenPlaylist)
+        )
+    )
+    val displaySection = MenuSection(
+        title = "显示设置",
+        entries = listOf(
+            MenuEntry(Icons.Default.ViewInAr, "视图", "视频比例 / OSD", onView),
+            MenuEntry(Icons.Default.DarkMode, "深色模式", "沉浸式播放体验", onThemeDark, highlight = true),
+            MenuEntry(Icons.Default.LightMode, "浅色模式", "明亮界面", onThemeLight),
+            MenuEntry(Icons.Default.BrightnessAuto, "跟随系统", "随系统暗色/亮色切换", onThemeSystem),
+            MenuEntry(Icons.Default.Info, "显示时间", "右上角时间组", onToggleShowTime, isToggle = true, toggleValue = showTime),
+            MenuEntry(Icons.Default.Info, "显示网速", "右下角网速", onToggleShowNetSpeed, isToggle = true, toggleValue = showNetSpeed),
+            MenuEntry(Icons.Default.Info, "隐藏序号", "频道列表不显示序号", onToggleHideChannelNum, isToggle = true, toggleValue = hideChannelNum),
+            MenuEntry(Icons.Default.Info, "关闭EPG", "不加载节目单", onToggleDisableEpg, isToggle = true, toggleValue = disableEpg),
+            MenuEntry(Icons.Default.Info, "关闭收藏", "不显示收藏星标", onToggleDisableFavorite, isToggle = true, toggleValue = disableFavorite),
+            MenuEntry(Icons.Default.Info, "列表图标", "频道列表显示台标", onToggleShowListIcon, isToggle = true, toggleValue = showListIcon),
+            MenuEntry(Icons.Default.Info, "底部图标", "底部信息栏显示图标", onToggleShowBottomIcon, isToggle = true, toggleValue = showBottomIcon)
+        )
+    )
+    val toolSection = MenuSection(
+        title = "工具设置",
+        entries = listOf(
+            MenuEntry(Icons.Default.Tune, "工具", "搜索 / 提醒 / 续播 / 书签", onTools),
+            MenuEntry(Icons.Default.ScreenshotMonitor, "截图", "单张 / 连拍 / 含字幕", onScreenshot),
+            MenuEntry(Icons.Default.GraphicEq, "A/V 同步", "实时数值 / 波形", onAvsync),
+            MenuEntry(Icons.Default.Public, "网络增强", "Referer / Proxy / Headers", onNetwork),
+            MenuEntry(Icons.Default.ContentCut, "切片导出", "裁剪视频片段 / GIF", onClipExport),
+            MenuEntry(Icons.Default.GraphicEq, "音频可视化", "实时频谱波形", onAudioVisualizer),
+            MenuEntry(Icons.Default.MusicNote, "歌词", "加载 LRC / 同步高亮", onLyrics)
+        )
+    )
+    val otherSection = MenuSection(
+        title = "其他设置",
+        entries = listOf(
+            MenuEntry(Icons.Default.Movie, "打开本地文件", "播放视频/音频文件", onOpenLocalVideo),
+            MenuEntry(Icons.Default.History, "最近打开", "最近打开的列表/视频", onRecent),
+            MenuEntry(Icons.Default.FileDownload, "另存为 M3U", "导出当前频道列表", onSaveAs),
+            MenuEntry(Icons.Default.Refresh, "刷新", "重新加载频道和 EPG", onRefresh),
+            MenuEntry(Icons.Default.Info, "关于", "版本信息 / 功能特性", onAbout),
+            MenuEntry(Icons.Default.PictureInPicture, "画中画", "进入 PiP 小窗口播放", onPip),
             MenuEntry(Icons.AutoMirrored.Filled.ExitToApp, "退出", "关闭应用", onQuit)
         )
     )
 
-    val themeSection = MenuSection(
-        title = "主题",
-        entries = listOf(
-            MenuEntry(Icons.Default.DarkMode, "深色模式", "沉浸式播放体验", onThemeDark, highlight = true),
-            MenuEntry(Icons.Default.LightMode, "浅色模式", "明亮界面", onThemeLight),
-            MenuEntry(Icons.Default.BrightnessAuto, "跟随系统", "随系统暗色/亮色切换", onThemeSystem)
-        )
-    )
-
-    return listOf(quickSection, fileSection, playbackSection, themeSection)
+    return listOf(lineSection, multiViewSection, playbackSettingsSection, channelSection, subscribeSection, displaySection, toolSection, otherSection)
 }
 
 // -----------------------------------------------------------------
@@ -592,6 +812,17 @@ private fun MenuEntryItem(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+        }
+        // 酷9风格：开关项
+        if (entry.isToggle) {
+            Switch(
+                checked = entry.toggleValue,
+                onCheckedChange = { onClick() },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = MaterialTheme.colorScheme.secondary,
+                    checkedTrackColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f)
+                )
+            )
         }
     }
 }

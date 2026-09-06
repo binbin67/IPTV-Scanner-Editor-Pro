@@ -34,6 +34,21 @@ object UiModeDetector {
      * 在 Activity 创建时调用一次，结果缓存在 ViewModel 中。
      */
     fun detect(context: Context): UiMode {
+        // 0. 用户强制 TV 模式（调试/模拟器用）
+        try {
+            val prefs = context.getSharedPreferences("iptv_user_prefs", android.content.Context.MODE_PRIVATE)
+            if (prefs.getBoolean("force_tv_mode", false)) {
+                return UiMode.TV
+            }
+        } catch (_: Exception) {}
+
+        // 0.1 文件标志强制 TV 模式（adb shell touch /sdcard/force_tv_mode）
+        try {
+            if (java.io.File("/sdcard/force_tv_mode").exists()) {
+                return UiMode.TV
+            }
+        } catch (_: Exception) {}
+
         // 1. 系统声明 TV 模式（最可靠）
         val currentModeType = context.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK
         if (currentModeType == Configuration.UI_MODE_TYPE_TELEVISION) {

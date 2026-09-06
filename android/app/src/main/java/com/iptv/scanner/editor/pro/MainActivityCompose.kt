@@ -66,6 +66,16 @@ class MainActivityCompose : ComponentActivity() {
     /** OK 键长按标记：长按显示控制层，跳过短按逻辑（打开统一面板） */
     private var okKeyLongPressed = false
 
+    /** 触控滑动检测：记录 ACTION_DOWN 坐标，ACTION_UP 时判断是否为滑动 */
+    private var touchDownX = 0f
+    private var touchDownY = 0f
+    private val touchSlop = 40f
+
+    /** 横屏模式判断：横屏统一用酷9风格布局，支持触控+遥控器 */
+    private fun isLandscapeMode(): Boolean {
+        return resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    }
+
     @Suppress("DEPRECATION")
     private val viewModel: AppViewModel by viewModels {
         AppViewModel.factory(application)
@@ -152,8 +162,60 @@ class MainActivityCompose : ComponentActivity() {
      *
      * PHONE 模式下也处理部分按键（BACK、MENU），方便外接键盘测试。
      */
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (viewModel.uiMode.value == UiMode.TV) {
+    /** 横屏触控处理：左40%→toggle频道列表，中20%→toggle底栏，右40%→toggle菜单 */
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (isLandscapeMode()) {
+            when (ev.action) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    touchDownX = ev.x
+                    touchDownY = ev.y
+                }
+                android.view.MotionEvent.ACTION_UP -> {
+                    val dx = ev.x - touchDownX
+                    val dy = ev.y - touchDownY
+                    val moved = (dx * dx + dy * dy) > touchSlop * touchSlop
+                    if (moved) return super.dispatchTouchEvent(ev)
+                    val w = resources.displayMetrics.widthPixels
+                    val h = resources.displayMetrics.heightPixels
+                    val x = ev.x
+                    val y = ev.y
+                    val sidebarOpen = viewModel.landscapeSidebarVisible.value
+                    val menuOpen = viewModel.menuPanelOpen.value
+                    val isLeftZone = x < w * 0.3f
+                    val isRightZone = x > w * 0.7f
+                    val isBottomZone = y > h * 0.85f
+                    if (isBottomZone && !sidebarOpen && !menuOpen) {
+                        viewModel.toggleControls()
+                        return true
+                    }
+                    if (sidebarOpen) {
+                        if (x < w * 0.82f) return super.dispatchTouchEvent(ev)
+                        viewModel.setLandscapeSidebarVisible(false)
+                        return true
+                    }
+                    if (menuOpen) {
+                        if (x > w - 850f) return super.dispatchTouchEvent(ev)
+                        viewModel.toggleMenuPanel()
+                        return true
+                    }
+                    if (isLeftZone) {
+                        viewModel.setLandscapeSidebarVisible(true)
+                        return true
+                    } else if (isRightZone) {
+                        viewModel.toggleMenuPanel()
+                        return true
+                    } else {
+                        viewModel.mpv.togglePause()
+                        return true
+                    }
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (isLandscapeMode()) {
             val kc = event.keyCode
             val isOk = kc == KeyEvent.KEYCODE_DPAD_CENTER || kc == KeyEvent.KEYCODE_ENTER
             val isDpad = kc == KeyEvent.KEYCODE_DPAD_UP || kc == KeyEvent.KEYCODE_DPAD_DOWN ||
@@ -240,16 +302,16 @@ class MainActivityCompose : ComponentActivity() {
             return true
         }
 
-        // MENU 键：TV 模式打开统一面板，PHONE 模式打开主菜单
+        // MENU 键：酷9风格 — TV/PHONE 都打开右侧设置菜单
         if (keyCode == KeyEvent.KEYCODE_MENU) {
-            val isTv = viewModel.uiMode.value == UiMode.TV
             when {
-                isTv -> {
-                    viewModel.setLandscapeSidebarVisible(!viewModel.landscapeSidebarVisible.value)
-                    Log.i(TAG, "MENU: toggle sidebar (visible=${viewModel.landscapeSidebarVisible.value})")
-                }
                 viewModel.menuPanelOpen.value -> {
                     viewModel.closeAllPanels()
+                }
+                viewModel.landscapeSidebarVisible.value -> {
+                    // 频道列表打开时，MENU键关闭频道列表再开设置菜单
+                    viewModel.setLandscapeSidebarVisible(false)
+                    viewModel.toggleMenuPanel()
                 }
                 viewModel.anyPanelOpen -> {
                     viewModel.closeAllPanels()
@@ -260,6 +322,15 @@ class MainActivityCompose : ComponentActivity() {
                 }
             }
             return true
+        }
+
+        // 左方向键：酷9风格 — TV模式下打开左侧频道列表
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && isLandscapeMode()) {
+            // 仅在全屏播放（无任何面板打开）时，左方向键打开频道列表
+            if (!viewModel.landscapeSidebarVisible.value && !viewModel.menuPanelOpen.value && !viewModel.anyPanelOpen) {
+                viewModel.setLandscapeSidebarVisible(true)
+                return true
+            }
         }
 
         // 媒体键处理（TV 和 PHONE 模式都工作，不受面板状态影响）
@@ -309,7 +380,7 @@ class MainActivityCompose : ComponentActivity() {
         }
 
         // 仅在 TV 模式下处理 DPAD 方向键
-        val isTv = viewModel.uiMode.value == UiMode.TV
+        val isTv = isLandscapeMode()
         if (!isTv) {
             // PHONE 模式下也处理一些快捷键（方便外接键盘测试）
             when (keyCode) {
@@ -337,7 +408,7 @@ class MainActivityCompose : ComponentActivity() {
                 keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
                 keyCode == KeyEvent.KEYCODE_ENTER
         // TV 侧边栏打开时，OK 键关闭侧边栏（不交给 Compose 焦点系统）
-        if (viewModel.uiMode.value == UiMode.TV && viewModel.landscapeSidebarVisible.value &&
+        if (isLandscapeMode() && viewModel.landscapeSidebarVisible.value &&
             (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
             viewModel.setLandscapeSidebarVisible(false)
             Log.i(TAG, "DPAD_CENTER: close sidebar")
@@ -458,7 +529,7 @@ class MainActivityCompose : ComponentActivity() {
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
             okKeyLongPressed = true
             // TV 模式：长按显示控制层（auto-hide）
-            if (viewModel.uiMode.value == UiMode.TV && !viewModel.anyPanelOpen) {
+            if (isLandscapeMode() && !viewModel.anyPanelOpen) {
                 viewModel.showControlsAutoHide()
                 Log.i(TAG, "Long press OK: show controls")
                 return true
@@ -476,7 +547,7 @@ class MainActivityCompose : ComponentActivity() {
                 okKeyLongPressed = false
                 return true
             }
-            if (viewModel.uiMode.value == UiMode.TV) {
+            if (isLandscapeMode()) {
                 return true
             }
             if (viewModel.anyPanelOpen) {

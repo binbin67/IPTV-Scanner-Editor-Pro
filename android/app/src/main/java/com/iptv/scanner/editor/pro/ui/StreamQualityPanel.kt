@@ -60,7 +60,7 @@ fun StreamQualityPanel(viewModel: AppViewModel) {
     val mpv = viewModel.mpv
     val fileLoaded by mpv.fileLoaded.collectAsState()
     val oc = rememberPlayerOverlayColors()
-    val isTv = viewModel.uiMode.value == UiMode.TV
+    val isTv = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
 
     // 每秒刷新（与 Web 端 setInterval 1000ms 一致）
     var tick by remember { mutableIntStateOf(0) }

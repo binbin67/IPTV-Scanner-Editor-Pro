@@ -580,6 +580,11 @@ data class LyricsLine(val time: Long, val text: String)
 
     private var osdHideJob: Job? = null
 
+    /** 切台时右上角频道号显示（3秒自动隐藏） */
+    private val _channelNumDisplay = MutableStateFlow("")
+    val channelNumDisplay: StateFlow<String> = _channelNumDisplay.asStateFlow()
+    private var channelNumHideJob: Job? = null
+
     // -----------------------------------------------------------------
     // 面板开关（手机模式：抽屉式；TV 模式：全屏覆盖式）
     // -----------------------------------------------------------------
@@ -1133,6 +1138,30 @@ private var currentIsLocalFile: Boolean
     private val _themeMode = MutableStateFlow(userPrefs.getThemeMode())
     val themeMode: StateFlow<String> = _themeMode.asStateFlow()
 
+    // 酷9风格显示设置开关项
+    private val _ku9ShowTime = MutableStateFlow(userPrefs.isKu9ShowTime())
+    val ku9ShowTime: StateFlow<Boolean> = _ku9ShowTime.asStateFlow()
+    private val _ku9ShowNetSpeed = MutableStateFlow(userPrefs.isKu9ShowNetSpeed())
+    val ku9ShowNetSpeed: StateFlow<Boolean> = _ku9ShowNetSpeed.asStateFlow()
+    private val _ku9HideChannelNum = MutableStateFlow(userPrefs.isKu9HideChannelNum())
+    val ku9HideChannelNum: StateFlow<Boolean> = _ku9HideChannelNum.asStateFlow()
+    private val _ku9DisableEpg = MutableStateFlow(userPrefs.isKu9DisableEpg())
+    val ku9DisableEpg: StateFlow<Boolean> = _ku9DisableEpg.asStateFlow()
+    private val _ku9DisableFavorite = MutableStateFlow(userPrefs.isKu9DisableFavorite())
+    val ku9DisableFavorite: StateFlow<Boolean> = _ku9DisableFavorite.asStateFlow()
+    private val _ku9ShowListIcon = MutableStateFlow(userPrefs.isKu9ShowListIcon())
+    val ku9ShowListIcon: StateFlow<Boolean> = _ku9ShowListIcon.asStateFlow()
+    private val _ku9ShowBottomIcon = MutableStateFlow(userPrefs.isKu9ShowBottomIcon())
+    val ku9ShowBottomIcon: StateFlow<Boolean> = _ku9ShowBottomIcon.asStateFlow()
+
+    fun setKu9ShowTime(enabled: Boolean) { _ku9ShowTime.value = enabled; userPrefs.setKu9ShowTime(enabled) }
+    fun setKu9ShowNetSpeed(enabled: Boolean) { _ku9ShowNetSpeed.value = enabled; userPrefs.setKu9ShowNetSpeed(enabled) }
+    fun setKu9HideChannelNum(enabled: Boolean) { _ku9HideChannelNum.value = enabled; userPrefs.setKu9HideChannelNum(enabled) }
+    fun setKu9DisableEpg(enabled: Boolean) { _ku9DisableEpg.value = enabled; userPrefs.setKu9DisableEpg(enabled) }
+    fun setKu9DisableFavorite(enabled: Boolean) { _ku9DisableFavorite.value = enabled; userPrefs.setKu9DisableFavorite(enabled) }
+    fun setKu9ShowListIcon(enabled: Boolean) { _ku9ShowListIcon.value = enabled; userPrefs.setKu9ShowListIcon(enabled) }
+    fun setKu9ShowBottomIcon(enabled: Boolean) { _ku9ShowBottomIcon.value = enabled; userPrefs.setKu9ShowBottomIcon(enabled) }
+
     /** 最近打开文件面板 */
     private val _recentPanelOpen = MutableStateFlow(false)
     val recentPanelOpen: StateFlow<Boolean> = _recentPanelOpen.asStateFlow()
@@ -1553,6 +1582,14 @@ private var currentIsLocalFile: Boolean
         currentPlaybackUrl = channel.url
         currentPlaybackName = channel.name
         currentIsLocalFile = false
+
+        // 切台时显示频道号（右上角，3秒自动隐藏）
+        _channelNumDisplay.value = String.format("%03d", idx + 1)
+        channelNumHideJob?.cancel()
+        channelNumHideJob = viewModelScope.launch {
+            delay(3_000L)
+            _channelNumDisplay.value = ""
+        }
 
         fileErrorSwitchJob?.cancel()
         fileErrorSwitchJob = null
@@ -3013,13 +3050,17 @@ private var currentIsLocalFile: Boolean
                             repository.getEpg(channel.name, channel.tvgId, channel.tvgName, channel.name)
                         }
                         val retryPrograms = retry.getOrNull()?.programmes ?: emptyList()
-                        epgCache[idx] = retryPrograms
-                        _epgCacheVersion.value++
+                        if (retryPrograms.isNotEmpty()) {
+                            epgCache[idx] = retryPrograms
+                            _epgCacheVersion.value++
+                        }
                         _currentEpg.value = trimEpgNearNow(retryPrograms)
                         Log.i(TAG, "fetchEpgForCurrent (retry): ${retryPrograms.size} programs for ${channel.name}")
                     } else {
-                        epgCache[idx] = programs
-                        _epgCacheVersion.value++
+                        if (programs.isNotEmpty()) {
+                            epgCache[idx] = programs
+                            _epgCacheVersion.value++
+                        }
                         _currentEpg.value = trimEpgNearNow(programs)
                         Log.i(TAG, "fetchEpgForCurrent: ${programs.size} programs for ${channel.name}")
                     }
@@ -3033,8 +3074,10 @@ private var currentIsLocalFile: Boolean
                             repository.getEpg(channel.name, channel.tvgId, channel.tvgName, channel.name)
                         }
                         val retryPrograms = retry.getOrNull()?.programmes ?: emptyList()
-                        epgCache[idx] = retryPrograms
-                        _epgCacheVersion.value++
+                        if (retryPrograms.isNotEmpty()) {
+                            epgCache[idx] = retryPrograms
+                            _epgCacheVersion.value++
+                        }
                         _currentEpg.value = trimEpgNearNow(retryPrograms)
                         Log.i(TAG, "fetchEpgForCurrent (retry after fail): ${retryPrograms.size} programs for ${channel.name}")
                     } catch (e2: Exception) {
@@ -3086,10 +3129,25 @@ private var currentIsLocalFile: Boolean
             result.fold(
                 onSuccess = { epgList ->
                     val programs = epgList.programmes
-                    epgCache[idx] = programs
-                    _epgCacheVersion.value++
-                    _focusedEpg.value = trimEpgNearNow(programs)
-                    Log.i(TAG, "fetchEpgForChannel: ${programs.size} programs for ${channel.name}")
+                    if (programs.isNotEmpty()) {
+                        epgCache[idx] = programs
+                        _epgCacheVersion.value++
+                        _focusedEpg.value = trimEpgNearNow(programs)
+                        Log.i(TAG, "fetchEpgForChannel: ${programs.size} programs for ${channel.name}")
+                    } else {
+                        Log.w(TAG, "fetchEpgForChannel: empty programs, will retry in 3s")
+                        kotlinx.coroutines.delay(3000)
+                        val retry = withContext(Dispatchers.IO) {
+                            repository.getEpg(baseName, channel.tvgId, channel.tvgName, channel.name)
+                        }
+                        val retryPrograms = retry.getOrNull()?.programmes ?: emptyList()
+                        if (retryPrograms.isNotEmpty()) {
+                            epgCache[idx] = retryPrograms
+                            _epgCacheVersion.value++
+                        }
+                        _focusedEpg.value = trimEpgNearNow(retryPrograms)
+                        Log.i(TAG, "fetchEpgForChannel (retry): ${retryPrograms.size} programs for ${channel.name}")
+                    }
                 },
                 onFailure = { e ->
                     Log.w(TAG, "fetchEpgForChannel failed: ${e.message}")
@@ -4397,6 +4455,7 @@ fun hideControls() {
         val chIdx = _currentIdx.value
         val startMs = program.startTs * 1000L
         val id = "${chIdx}_${program.title}_${startMs}"
+        _reminders.value
         return userPrefs.hasReminder(id)
     }
 
@@ -6883,8 +6942,20 @@ showOsd("播放器设置", "日志等级: $levelName")
     fun reloadEpgSources() {
         viewModelScope.launch {
             showOsd("正在重载 EPG...")
+            epgCache.clear()
+            _epgCacheVersion.value++
+            _focusedEpg.value = emptyList()
+            _currentEpg.value = emptyList()
             val result = withContext(Dispatchers.IO) { repository.reloadEpg() }
-            result.onSuccess { showOsd("EPG 重载已启动") }
+            result.onSuccess {
+                showOsd("EPG 重载已启动")
+                delay(10000)
+                epgCache.clear()
+                _epgCacheVersion.value++
+                preloadEpgForAllChannels()
+                if (_currentIdx.value >= 0) fetchEpgForCurrent()
+                fetchEpgForChannel(_currentIdx.value)
+            }
                 .onFailure { showOsd("EPG 重载失败", it.message ?: "") }
         }
     }

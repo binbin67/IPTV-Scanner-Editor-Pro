@@ -1038,7 +1038,10 @@ class ServerContext:
             from core.subscription_manager import SubscriptionManager
             sm = SubscriptionManager()
             self._epg_parser = sm
-            # 若已有 EPG 源则尝试加载缓存或后台拉取
+            # 先尝试从缓存加载EPG数据（进程重启后立即可用）
+            if sm.load_cached_epg_data():
+                logger.info("独立模式：EPG缓存加载成功")
+            # 若已有 EPG 源则后台加载（下载新数据）
             sources = sm.get_epg_sources() if hasattr(sm, 'get_epg_sources') else []
             if sources:
                 logger.info(f"独立模式：检测到 {len(sources)} 个 EPG 源，开始后台加载 EPG 数据")

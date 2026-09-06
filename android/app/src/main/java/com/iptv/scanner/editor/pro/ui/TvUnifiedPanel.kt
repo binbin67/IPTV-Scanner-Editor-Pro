@@ -84,6 +84,11 @@ import com.iptv.scanner.editor.pro.ui.AppViewModel.ChannelTab
 import com.iptv.scanner.editor.pro.ui.theme.tvFocusBorder
 import java.util.Locale
 
+// 酷9风格配色
+private val KU9_ACCENT_GREEN = Color(0xFF2979FF)
+private val KU9_ACCENT_CYAN = Color(0xFF00BCD4)
+private val KU9_ICON_BG = Color(0x32FFFFFF)
+
 /**
  * TV 端统一面板：五列布局（控制层 + 分组 + 频道列表 + 节目单 + 节目描述）。
  *
@@ -122,6 +127,10 @@ fun TvUnifiedPanel(viewModel: AppViewModel) {
     val focusedEpg by viewModel.focusedEpg.collectAsState()
     val focusedEpgLoading by viewModel.focusedEpgLoading.collectAsState()
     val controlsPinned by viewModel.controlsPinned.collectAsState()
+    val epgCacheVersion by viewModel.epgCacheVersion.collectAsState()
+    val ku9HideChannelNum by viewModel.ku9HideChannelNum.collectAsState()
+    val ku9DisableFavorite by viewModel.ku9DisableFavorite.collectAsState()
+    val ku9DisableEpg by viewModel.ku9DisableEpg.collectAsState()
 
     // 多画面状态（多画面模式下点击频道添加到副画面，而非切换主画面）
     val multiViewState by viewModel.multiViewState.collectAsState()
@@ -146,6 +155,11 @@ fun TvUnifiedPanel(viewModel: AppViewModel) {
         }
     }
     val selectedGroup by viewModel.selectedGroup.collectAsState()
+
+    // 订阅源列表（多源时显示切换列）
+    val sources by viewModel.sources.collectAsState()
+    val selectedSource by viewModel.selectedSource.collectAsState()
+    val enabledSources = remember(sources) { sources.filter { it.enabled } }
 
     // 统一面板状态
     var unifiedMode by remember { mutableStateOf(UnifiedMode.CHANNELS) }
@@ -178,6 +192,10 @@ fun TvUnifiedPanel(viewModel: AppViewModel) {
         if (sidebarVisible) {
             kotlinx.coroutines.delay(300)
             kotlin.runCatching { channelListFocus.requestFocus() }
+            // 自动聚焦当前播放频道，使EPG列显示
+            if (focusedChannelIdx < 0 && currentIdx >= 0) {
+                focusedChannelIdx = currentIdx
+            }
         }
     }
 
@@ -212,7 +230,7 @@ fun TvUnifiedPanel(viewModel: AppViewModel) {
      * - 正常 TV 模式：TvUnifiedPanel 由 _landscapeSidebarVisible 控制渲染（在 TvPlayerLayout 的 AnimatedVisibility 内）
      * - 多画面模式：TvUnifiedPanel 由 _tvUnifiedPanelOpen 控制渲染（在 MainPlayerScreen 顶层）
      * 两种模式都要关闭，确保子面板的 focusGroup() 不被下层 TvUnifiedPanel 的菜单项干扰
-     * （ModeIconButton 的 autoSelectOnFocus=true 会在获得焦点时自动触发模式切换）。
+     * （底部功能图标在分组列底部，按OK键触发模式切换）。
      *
      * 子面板关闭后回到播放界面，用户按 MENU 键可重新打开主菜单。
      */
@@ -227,115 +245,131 @@ fun TvUnifiedPanel(viewModel: AppViewModel) {
         color = Color.Transparent,
         modifier = Modifier.fillMaxSize()
     ) {
-Row(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
-// -----------------------------------------------------------------
-// 第一列：控制层（订阅 / 本地 / 菜单 / OSD）
-            // -----------------------------------------------------------------
-            ModeColumn(
-                mode = unifiedMode,
-                channelsTab = channelsTab,
-                controlsPinned = controlsPinned,
-                onTabChange = { tab ->
-                    // 切换 tab 并强制回到频道列表模式
-                    viewModel.setChannelsTab(tab)
-                    unifiedMode = UnifiedMode.CHANNELS
-                    selectedProgram = null
-                    // 重置焦点频道：切换 tab 后旧 focusedChannelIdx 可能指向新 tab 中不存在的频道，
-                    // 导致节目单/节目描述仍显示旧频道数据。重置为 -1，由 ChannelsColumn 的
-                    // LaunchedEffect 在新 tab 中重新请求焦点到 currentIdx（若存在）。
-                    focusedChannelIdx = -1
-                },
-                onModeChange = { newMode ->
-                    unifiedMode = newMode
-                    selectedProgram = null
-                },
-                onOsd = {
-                    // 切换控制层持久模式（pin/unpin），不关闭面板以便再次点击关闭
-                    viewModel.toggleControlsPinned()
-                },
-                modifier = Modifier.width(72.dp)
-            )
-
+        Row(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
             when (unifiedMode) {
                 UnifiedMode.CHANNELS -> {
-                    // 是否显示分组列和节目单/描述列：
-                    // - groups 为空时不显示分组列（如本地频道无分组）
-                    // - focusedChannel 为 null 时不显示节目单/描述列（如列表为空或切换 tab 后未选中频道）
-                    // 用户需求："本地列表如果为空，就默认不应该显示节目单和节目描述和分组，
-                    //           只有一个列表才对。有对应数据的时候再显示出来。"
+                    // 是否显示分组列和节目单/描述列
                     val showGroups = groups.isNotEmpty()
-                    val showEpg = focusedChannel != null
+                    val showEpg = !ku9DisableEpg
 
                     // -----------------------------------------------------------------
-                    // 第二列：分组列表（仅有分组数据时显示）
+                    // 第0列：快捷菜单列（酷9风格竖向图标列）
                     // -----------------------------------------------------------------
-                    if (showGroups) {
-                        GroupColumn(
-                            groups = groups,
-                            selectedGroup = selectedGroup,
-                            onGroupSelected = { viewModel.setSelectedGroup(it) },
-                            modifier = Modifier.width(130.dp)
-                        )
-                    }
-
-                    // -----------------------------------------------------------------
-                    // 第三列：频道列表（始终固定宽度，不因无节目单而全屏）
-                    // 用户需求："列表无数据的时候非得要全屏显示吗？就不能跟菜单似的只是一列？"
-                    // -----------------------------------------------------------------
-                    ChannelsColumn(
-                        channels = channels,
-                        currentIdx = currentIdx,
-                        favorites = favorites,
+                    QuickMenuColumn(
                         channelsTab = channelsTab,
-                        selectedGroup = selectedGroup,
-                        onChannelClick = { idx ->
-                            // 多画面模式：点击频道添加到焦点/空闲副画面；非多画面：切换主画面
-                            if (multiViewState.active) {
-                                viewModel.addChannelToMultiView(idx)
-                            } else {
-                                viewModel.playChannel(idx)
-                            }
+                        controlsPinned = controlsPinned,
+                        onTabChange = { tab ->
+                            viewModel.setChannelsTab(tab)
+                            unifiedMode = UnifiedMode.CHANNELS
+                            selectedProgram = null
+                            focusedChannelIdx = -1
                         },
-                        onFocusedChannelChange = { idx -> focusedChannelIdx = idx },
-                        modifier = Modifier.width(200.dp).focusRequester(channelListFocus)
+                        onModeChange = { newMode ->
+                            unifiedMode = newMode
+                            selectedProgram = null
+                        },
+                        onOsd = { viewModel.toggleControlsPinned() },
+                        modifier = Modifier.width(48.dp)
                     )
 
                     // -----------------------------------------------------------------
-                    // 第四列：节目单（仅有焦点频道时显示）
+                    // 订阅源切换列（多源时显示，酷9风格）
                     // -----------------------------------------------------------------
-                    if (showEpg && focusedChannel != null && epgColumnsReady) {
-                        EpgListColumn(
-                            channel = focusedChannel,
-                            epg = focusedEpg,
-                            loading = focusedEpgLoading,
-                            selectedProgram = selectedProgram,
-                            onProgramSelect = { program -> selectedProgram = program },
-                            onProgramClick = { program ->
-                                val now = System.currentTimeMillis()
-                                val isPast = program.stopTs * 1000L < now
-                                if (isPast) {
-                                    // 过去节目：触发回看（先切换到焦点频道再回看）
-                                    viewModel.playChannel(focusedChannelIdx)
-                                    openOverlay { viewModel.startCatchup(program) }
-                                } else {
-                                    // 当前/未来节目：设置提醒
-                                    viewModel.toggleReminder(program, focusedChannel)
-                                }
+                    if (enabledSources.size > 1) {
+                        SourceSwitchColumn(
+                            sources = enabledSources,
+                            selectedSource = selectedSource,
+                            onSourceSelected = { url ->
+                                viewModel.setSelectedSource(url)
+                                viewModel.refreshUi()
                             },
-                            isReminderSet = { program -> viewModel.isReminderSet(program) },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.width(72.dp)
                         )
                     }
 
                     // -----------------------------------------------------------------
-                    // 第五列：节目描述（仅有焦点频道时显示）
+                    // 分组+频道+EPG 合并为一个圆角矩形
                     // -----------------------------------------------------------------
-                    if (showEpg && focusedChannel != null && epgColumnsReady) {
-                        EpgDescColumn(
-                            epg = focusedEpg,
-                            selectedProgram = selectedProgram,
-                            modifier = Modifier.width(220.dp)
-                        )
+                    Box(
+                        modifier = Modifier.fillMaxHeight()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0x80222222))
+                    ) {
+                        Row(modifier = Modifier.fillMaxHeight()) {
+                            // 第一列：分组列表
+                            if (showGroups) {
+                                GroupColumn(
+                                    groups = groups,
+                                    selectedGroup = selectedGroup,
+                                    onGroupSelected = { viewModel.setSelectedGroup(it) },
+                                    modifier = Modifier.width(180.dp)
+                                )
+                            }
+
+                            // 第二列：频道列表
+                            ChannelsColumn(
+                                channels = channels,
+                                currentIdx = currentIdx,
+                                favorites = favorites,
+                                channelsTab = channelsTab,
+                                selectedGroup = selectedGroup,
+                                getCachedCurrentProgram = { idx ->
+                                    viewModel.getCachedCurrentProgram(idx)
+                                },
+                                epgCacheVersion = epgCacheVersion,
+                                hideChannelNum = ku9HideChannelNum,
+                                disableFavorite = ku9DisableFavorite,
+                                disableEpg = ku9DisableEpg,
+                                onChannelClick = { idx ->
+                                    if (multiViewState.active) {
+                                        viewModel.addChannelToMultiView(idx)
+                                    } else {
+                                        viewModel.playChannel(idx)
+                                    }
+                                },
+                                onFocusedChannelChange = { idx -> focusedChannelIdx = idx },
+                                modifier = Modifier.width(260.dp).focusRequester(channelListFocus)
+                            )
+
+                            // 第三列：节目单
+                            if (showEpg) {
+                                if (focusedChannel != null) {
+                                    EpgListColumn(
+                                        channel = focusedChannel,
+                                        epg = focusedEpg,
+                                        loading = focusedEpgLoading,
+                                        selectedProgram = selectedProgram,
+                                        onProgramSelect = { program -> selectedProgram = program },
+                                        onProgramClick = { program ->
+                                            val nowSec = System.currentTimeMillis() / 1000L
+                                            val isLive = program.startTs <= nowSec && program.stopTs >= nowSec
+                                            val isPast = program.stopTs < nowSec
+                                            when {
+                                                isLive -> viewModel.playChannel(focusedChannelIdx)
+                                                isPast -> {
+                                                    viewModel.playChannel(focusedChannelIdx)
+                                                    openOverlay { viewModel.startCatchup(program) }
+                                                }
+                                                else -> viewModel.toggleReminder(program, focusedChannel)
+                                            }
+                                        },
+                                        isReminderSet = { program -> viewModel.isReminderSet(program) },
+                                        modifier = Modifier.width(260.dp)
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier.width(260.dp).fillMaxHeight(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            "请选择频道",
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontSize = 14.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 UnifiedMode.MENU -> {
@@ -434,102 +468,64 @@ Row(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
 enum class UnifiedMode { CHANNELS, MENU }
 
 // =====================================================================
-// 第一列：控制层（订阅 / 本地 / 菜单 / OSD）
+// 分组列表列
+// =====================================================================
+
+// =====================================================================
+// 订阅源切换列（酷9风格，多源时显示）
 // =====================================================================
 
 @Composable
-private fun ModeColumn(
-    mode: UnifiedMode,
-    channelsTab: ChannelTab,
-    controlsPinned: Boolean,
-    onTabChange: (ChannelTab) -> Unit,
-    onModeChange: (UnifiedMode) -> Unit,
-    onOsd: () -> Unit,
+private fun SourceSwitchColumn(
+    sources: List<com.iptv.scanner.editor.pro.data.IptvSource>,
+    selectedSource: String,
+    onSourceSelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
-        color = Color(0x15FFFFFF),
+        color = Color(0x80222222),
+        shape = RoundedCornerShape(10.dp),
         modifier = modifier.fillMaxHeight()
     ) {
-        Column(
-            modifier = Modifier.fillMaxHeight().padding(vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp)
         ) {
-            // 订阅按钮：切换到 SUB tab 并回到频道列表模式
-            ModeIconButton(
-                icon = Icons.Default.Web,
-                label = "订阅",
-                isSelected = mode == UnifiedMode.CHANNELS && channelsTab == ChannelTab.SUB,
-                onClick = { onTabChange(ChannelTab.SUB) },
-                autoSelectOnFocus = true
-            )
-            // 本地按钮：切换到 LOCAL tab 并回到频道列表模式
-            ModeIconButton(
-                icon = Icons.Default.VideoLibrary,
-                label = "本地",
-                isSelected = mode == UnifiedMode.CHANNELS && channelsTab == ChannelTab.LOCAL,
-                onClick = { onTabChange(ChannelTab.LOCAL) },
-                autoSelectOnFocus = true
-            )
-            // 菜单按钮：切换到 MENU 模式
-            ModeIconButton(
-                icon = Icons.Default.Menu,
-                label = "菜单",
-                isSelected = mode == UnifiedMode.MENU,
-                onClick = { onModeChange(UnifiedMode.MENU) },
-                autoSelectOnFocus = true
-            )
-            // OSD 按钮（切换控制层持久显示）：需要按 OK 键触发，不自动选中
-            ModeIconButton(
-                icon = if (controlsPinned) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                label = "OSD",
-                isSelected = controlsPinned,
-                onClick = onOsd
-            )
+            items(items = sources, key = { it.url }) { src ->
+                val isSelected = src.url == selectedSource
+                val displayName = src.name.ifEmpty { src.url.substringAfterLast('/').take(6) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(if (isSelected) KU9_ACCENT_GREEN.copy(alpha = 0.2f) else Color.Transparent)
+                        .tvFocusBorder()
+                        .clickable { onSourceSelected(src.url) }
+                        .padding(horizontal = 6.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(if (isSelected) KU9_ACCENT_GREEN else MaterialTheme.colorScheme.outline)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = displayName,
+                        color = if (isSelected) KU9_ACCENT_GREEN else MaterialTheme.colorScheme.onSurface,
+                        fontSize = 11.sp,
+                        fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
     }
 }
 
-@Composable
-private fun ModeIconButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    autoSelectOnFocus: Boolean = false
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (isSelected) Color(0x30FFFFFF) else Color.Transparent)
-            .tvFocusBorder()
-            .onFocusChanged { state ->
-                if (autoSelectOnFocus && state.isFocused && !isSelected) {
-                    onClick()
-                }
-            }
-            .clickable { if (!isSelected) onClick() }
-            .padding(horizontal = 8.dp, vertical = 10.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = if (isSelected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(28.dp)
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = label,
-            color = if (isSelected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 10.sp
-        )
-    }
-}
-
 // =====================================================================
-// 第二列：分组列表（纵向）
+// 分组列
 // =====================================================================
 
 @Composable
@@ -544,16 +540,6 @@ private fun GroupColumn(
         modifier = modifier.fillMaxHeight()
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // 标题
-            Text(
-                text = "分组",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
-            )
-            Divider(color = Color(0x20FFFFFF))
-
             if (groups.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -594,6 +580,71 @@ private fun GroupColumn(
     }
 }
 
+// =====================================================================
+// 快捷菜单列（酷9风格竖向图标列）
+// =====================================================================
+
+@Composable
+private fun QuickMenuColumn(
+    channelsTab: ChannelTab,
+    controlsPinned: Boolean,
+    onTabChange: (ChannelTab) -> Unit,
+    onModeChange: (UnifiedMode) -> Unit,
+    onOsd: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = Color(0x80222222),
+        shape = RoundedCornerShape(10.dp),
+        modifier = modifier.fillMaxHeight().padding(end = 6.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxHeight().padding(vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
+        ) {
+            QuickMenuIcon(Icons.Default.Web, "订阅", channelsTab == ChannelTab.SUB) { onTabChange(ChannelTab.SUB) }
+            QuickMenuIcon(Icons.Default.VideoLibrary, "本地", channelsTab == ChannelTab.LOCAL) { onTabChange(ChannelTab.LOCAL) }
+
+            QuickMenuIcon(
+                if (controlsPinned) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                "OSD", controlsPinned, onOsd
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuickMenuIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (isSelected) KU9_ACCENT_GREEN else Color.Transparent)
+            .tvFocusBorder()
+            .clickable { onClick() }
+            .padding(horizontal = 6.dp, vertical = 8.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = if (isSelected) Color.White else Color(0xCCFFFFFF),
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.height(3.dp))
+        Text(
+            text = label,
+            color = if (isSelected) Color.White else Color(0x99FFFFFF),
+            fontSize = 9.sp
+        )
+    }
+}
+
 @Composable
 private fun GroupItemRow(
     label: String,
@@ -603,7 +654,7 @@ private fun GroupItemRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (selected) MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f) else Color.Transparent)
+            .background(if (selected) KU9_ACCENT_CYAN.copy(alpha = 0.2f) else Color.Transparent)
             .tvFocusBorder()
             .clickable { onClick() }
             .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -614,12 +665,12 @@ private fun GroupItemRow(
             modifier = Modifier
                 .size(6.dp)
                 .clip(CircleShape)
-                .background(if (selected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline)
+                .background(if (selected) KU9_ACCENT_CYAN else MaterialTheme.colorScheme.outline)
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = label,
-            color = if (selected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface,
+            color = if (selected) KU9_ACCENT_CYAN else MaterialTheme.colorScheme.onSurface,
             fontSize = 13.sp,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
             maxLines = 1,
@@ -639,6 +690,11 @@ private fun ChannelsColumn(
     favorites: Set<Int>,
     channelsTab: ChannelTab,
     selectedGroup: String,
+    getCachedCurrentProgram: (Int) -> IptvEpgProgram?,
+    epgCacheVersion: Int,
+    hideChannelNum: Boolean,
+    disableFavorite: Boolean,
+    disableEpg: Boolean,
     onChannelClick: (Int) -> Unit,
     onFocusedChannelChange: (Int) -> Unit,
     modifier: Modifier = Modifier
@@ -688,16 +744,6 @@ private fun ChannelsColumn(
         modifier = modifier.fillMaxHeight()
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // 标题
-            Text(
-                text = "频道列表",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
-            )
-
-            Divider(color = Color(0x20FFFFFF))
 
             // 频道列表
             if (filteredChannels.isEmpty()) {
@@ -727,10 +773,16 @@ private fun ChannelsColumn(
                         items = filteredChannels,
                         key = { (channel, idx) -> idx }
                     ) { (channel, idx) ->
+                        val currentEpgTitle = remember(epgCacheVersion, idx) {
+                            if (disableEpg) "" else getCachedCurrentProgram(idx)?.title ?: ""
+                        }
                         TvChannelItem(
                             channel = channel,
+                            channelIdx = idx,
                             isPlaying = idx == currentIdx,
-                            isFavorite = favorites.contains(idx),
+                            isFavorite = !disableFavorite && favorites.contains(idx),
+                            currentEpgTitle = currentEpgTitle,
+                            hideChannelNum = hideChannelNum,
                             focusRequester = if (idx == currentIdx) currentChannelFocus else null,
                             onClick = { onChannelClick(idx) },
                             onFocusChange = { isFocused ->
@@ -811,8 +863,11 @@ private fun TvGroupChip(
 @Composable
 private fun TvChannelItem(
     channel: IptvChannel,
+    channelIdx: Int,
     isPlaying: Boolean,
     isFavorite: Boolean,
+    currentEpgTitle: String = "",
+    hideChannelNum: Boolean = false,
     onClick: () -> Unit,
     onFocusChange: (Boolean) -> Unit = {},
     focusRequester: FocusRequester? = null
@@ -823,48 +878,66 @@ private fun TvChannelItem(
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { onFocusChange(it.isFocused) }
             .tvFocusBorder()
+            .then(if (isPlaying) Modifier.background(KU9_ACCENT_GREEN) else Modifier)
             .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 频道台标（logo）：有 logo 显示图片，无 logo 显示圆点
-        if (channel.logo.isNotEmpty()) {
-            coil.compose.AsyncImage(
-                model = channel.logo,
-                contentDescription = channel.name,
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(4.dp)),
-                contentScale = androidx.compose.ui.layout.ContentScale.Fit
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(if (isPlaying) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline)
-            )
+        // 酷9风格：序号显示（圆角矩形背景）
+        if (!hideChannelNum) {
+            Surface(
+                color = if (isPlaying) Color.White.copy(alpha = 0.2f) else KU9_ICON_BG,
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Text(
+                    text = "${channelIdx + 1}",
+                    color = if (isPlaying) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
         }
-        Spacer(modifier = Modifier.width(10.dp))
-        // 频道名 + 分组
+        // 酷9风格：频道台标（logo）：有 logo 显示图片，无 logo 显示首字
+        Box(
+            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(4.dp)).background(KU9_ICON_BG),
+            contentAlignment = Alignment.Center
+        ) {
+            if (channel.logo.isNotEmpty()) {
+                coil.compose.AsyncImage(
+                    model = channel.logo,
+                    contentDescription = channel.name,
+                    modifier = Modifier.fillMaxSize().padding(3.dp),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                )
+            } else {
+                Text(
+                    text = channel.name.take(1).ifEmpty { "·" },
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        // 频道名 + 当前节目 + 分组
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = channel.name,
-                color = if (isPlaying) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface,
-                fontSize = 14.sp,
+                color = if (isPlaying) Color.White else MaterialTheme.colorScheme.onSurface,
+                fontSize = 15.sp,
                 fontWeight = if (isPlaying) FontWeight.Medium else FontWeight.Normal,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            if (channel.group.isNotEmpty()) {
-                Text(
-                    text = channel.group,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            // 酷9风格：当前节目名，EPG为空时显示"精彩节目"
+            Text(
+                text = currentEpgTitle.ifEmpty { "精彩节目" },
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
         // 收藏星标
         if (isFavorite) {
@@ -1116,36 +1189,6 @@ private fun EpgListColumn(
         modifier = modifier.fillMaxHeight()
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // 标题
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.VideoLibrary,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "节目单",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = channel.name,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Divider(color = Color(0x20FFFFFF))
 
             when {
                 loading -> {
@@ -1204,7 +1247,7 @@ private fun TvEpgItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (isCurrent) MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f) else Color.Transparent)
+            .background(if (isCurrent) KU9_ACCENT_GREEN.copy(alpha = 0.2f) else Color.Transparent)
             .tvFocusBorder()
             .clickable {
                 onSelect()
@@ -1213,13 +1256,13 @@ private fun TvEpgItem(
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 左侧蓝色边框（当前节目）
+        // 左侧绿色边框（当前节目）
         if (isCurrent) {
             Box(
                 modifier = Modifier
                     .width(3.dp)
                     .height(36.dp)
-                    .background(MaterialTheme.colorScheme.secondary)
+                    .background(KU9_ACCENT_GREEN)
             )
             Spacer(modifier = Modifier.width(8.dp))
         }
@@ -1229,25 +1272,9 @@ private fun TvEpgItem(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "${formatTime(program.start)} - ${formatTime(program.stop)}",
-                    color = if (isPast) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
                 )
-                if (isCurrent) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "LIVE",
-                        color = Color(0xFFFF5252),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                if (hasReminder) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "🔔",
-                        fontSize = 10.sp
-                    )
-                }
             }
             Spacer(modifier = Modifier.height(2.dp))
             // 节目标题
@@ -1255,7 +1282,7 @@ private fun TvEpgItem(
                 text = program.title,
                 color = when {
                     isPast -> MaterialTheme.colorScheme.onSurfaceVariant
-                    isCurrent -> MaterialTheme.colorScheme.secondary
+                    isCurrent -> KU9_ACCENT_GREEN
                     else -> MaterialTheme.colorScheme.onSurface
                 },
                 fontSize = 13.sp,
@@ -1264,8 +1291,29 @@ private fun TvEpgItem(
                 overflow = TextOverflow.Ellipsis
             )
         }
+        // 酷9风格：回看/直播/预约标签
+        if (isPast) {
+            Surface(color = KU9_ACCENT_CYAN.copy(alpha = 0.2f), shape = RoundedCornerShape(3.dp)) {
+                Text("回看", color = KU9_ACCENT_CYAN, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+            }
+        } else if (isCurrent) {
+            Surface(color = Color(0xFFFF5252).copy(alpha = 0.2f), shape = RoundedCornerShape(3.dp)) {
+                Text("直播", color = Color(0xFFFF5252), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+            }
+        } else {
+            if (hasReminder) {
+                Surface(color = KU9_ACCENT_GREEN.copy(alpha = 0.2f), shape = RoundedCornerShape(3.dp)) {
+                    Text("已预约", color = KU9_ACCENT_GREEN, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                }
+            } else {
+                Surface(color = Color(0x20FFFFFF), shape = RoundedCornerShape(3.dp)) {
+                    Text("预约", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                }
+            }
+        }
     }
 }
+
 
 // =====================================================================
 // 第五列：节目描述

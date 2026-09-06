@@ -746,10 +746,13 @@ class SubscriptionManager(Singleton):
         cache_dir = self._get_cache_dir()
         cache_file = os.path.join(cache_dir, 'epg_cache.json')
         
+        logger.info(f"load_cached_epg_data: cache_file={cache_file}, exists={os.path.exists(cache_file)}")
         if not os.path.exists(cache_file):
             return False
         
         try:
+            file_size = os.path.getsize(cache_file)
+            logger.info(f"load_cached_epg_data: loading {file_size} bytes from {cache_file}")
             with open(cache_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
@@ -764,10 +767,12 @@ class SubscriptionManager(Singleton):
                         self._epg_channel_names[channel_id] = channel_id
                 self._last_epg_update = datetime.now()
             
-            logger.debug(f"从缓存加载EPG数据成功: {len(data)} 个频道")
+            logger.info(f"load_cached_epg_data: 成功加载 {len(data)} 个频道")
             return True
         except Exception as e:
             logger.error(f"加载EPG缓存失败: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def is_epg_valid(self) -> bool:

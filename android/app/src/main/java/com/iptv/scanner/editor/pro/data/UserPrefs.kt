@@ -1118,6 +1118,15 @@ fun getTimeoutSwitchSource(): Int = prefs.getInt(KEY_TIMEOUT_SWITCH_SOURCE, DEFA
         private const val KEY_PORTRAIT_FULLSCREEN = "portrait_fullscreen"
         private const val DEFAULT_PORTRAIT_FULLSCREEN = false
 
+        // 酷9风格显示设置开关项
+        private const val KEY_KU9_SHOW_TIME = "ku9_show_time"
+        private const val KEY_KU9_SHOW_NETSPEED = "ku9_show_netspeed"
+        private const val KEY_KU9_HIDE_CHANNEL_NUM = "ku9_hide_channel_num"
+        private const val KEY_KU9_DISABLE_EPG = "ku9_disable_epg"
+        private const val KEY_KU9_DISABLE_FAVORITE = "ku9_disable_favorite"
+        private const val KEY_KU9_SHOW_LIST_ICON = "ku9_show_list_icon"
+        private const val KEY_KU9_SHOW_BOTTOM_ICON = "ku9_show_bottom_icon"
+
         @Volatile
         private var INSTANCE: UserPrefs? = null
 
@@ -1161,4 +1170,36 @@ fun getTimeoutSwitchSource(): Int = prefs.getInt(KEY_TIMEOUT_SWITCH_SOURCE, DEFA
     fun setPortraitFullscreen(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_PORTRAIT_FULLSCREEN, enabled).apply()
     }
+
+    // -----------------------------------------------------------------
+    // 酷9风格显示设置开关项
+    // -----------------------------------------------------------------
+
+    fun isKu9ShowTime(): Boolean = prefs.getBoolean(KEY_KU9_SHOW_TIME, true)
+    fun setKu9ShowTime(enabled: Boolean) { prefs.edit().putBoolean(KEY_KU9_SHOW_TIME, enabled).apply() }
+
+    fun isKu9ShowNetSpeed(): Boolean = prefs.getBoolean(KEY_KU9_SHOW_NETSPEED, true)
+    fun setKu9ShowNetSpeed(enabled: Boolean) { prefs.edit().putBoolean(KEY_KU9_SHOW_NETSPEED, enabled).apply() }
+
+    fun isKu9HideChannelNum(): Boolean = prefs.getBoolean(KEY_KU9_HIDE_CHANNEL_NUM, false)
+    fun setKu9HideChannelNum(enabled: Boolean) { prefs.edit().putBoolean(KEY_KU9_HIDE_CHANNEL_NUM, enabled).apply() }
+
+    fun isKu9DisableEpg(): Boolean = prefs.getBoolean(KEY_KU9_DISABLE_EPG, false)
+    fun setKu9DisableEpg(enabled: Boolean) { prefs.edit().putBoolean(KEY_KU9_DISABLE_EPG, enabled).apply() }
+
+    fun isKu9DisableFavorite(): Boolean = prefs.getBoolean(KEY_KU9_DISABLE_FAVORITE, false)
+    fun setKu9DisableFavorite(enabled: Boolean) { prefs.edit().putBoolean(KEY_KU9_DISABLE_FAVORITE, enabled).apply() }
+
+    fun isKu9ShowListIcon(): Boolean = prefs.getBoolean(KEY_KU9_SHOW_LIST_ICON, true)
+    fun setKu9ShowListIcon(enabled: Boolean) { prefs.edit().putBoolean(KEY_KU9_SHOW_LIST_ICON, enabled).apply() }
+
+    fun isKu9ShowBottomIcon(): Boolean = prefs.getBoolean(KEY_KU9_SHOW_BOTTOM_ICON, true)
+    fun setKu9ShowBottomIcon(enabled: Boolean) { prefs.edit().putBoolean(KEY_KU9_SHOW_BOTTOM_ICON, enabled).apply() }
+
+    // -----------------------------------------------------------------
+    // 强制 TV 模式（调试/模拟器用）
+    // -----------------------------------------------------------------
+
+    fun isForceTvMode(): Boolean = prefs.getBoolean("force_tv_mode", false)
+    fun setForceTvMode(enabled: Boolean) { prefs.edit().putBoolean("force_tv_mode", enabled).apply() }
 }

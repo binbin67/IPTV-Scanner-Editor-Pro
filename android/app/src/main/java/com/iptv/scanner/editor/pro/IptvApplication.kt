@@ -100,6 +100,7 @@ class IptvApplication : PyApplication(), ImageLoaderFactory {
             // 允许内存和磁盘缓存
             .memoryCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(CachePolicy.ENABLED)
+            .respectCacheHeaders(false)
             .build()
     }
 

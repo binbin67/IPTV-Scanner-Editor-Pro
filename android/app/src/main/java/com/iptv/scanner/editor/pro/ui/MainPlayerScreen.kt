@@ -329,10 +329,19 @@ fun MainPlayerScreen(viewModel: AppViewModel) {
     }
     val configuration = LocalConfiguration.current
     val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
-    // 竖屏 PHONE 模式：默认上下分屏（视频 16:9 + 频道列表）
-    val portraitSplit = uiMode.isPhone && isPortrait && !multiViewState.active
-    // 横屏 PHONE 模式：使用 compact 抽屉
-    val landscapeCompact = uiMode.isPhone && !isPortrait
+    // 竖屏：手机竖屏观看
+    // 横屏：手机横屏 + TV横屏，统一酷9风格，支持触控+遥控器
+    val portraitSplit = isPortrait && !multiViewState.active
+
+    // 全局EPG预加载（竖屏+横屏统一）：频道加载后立即预加载，15秒后重试
+    val globalChannels by viewModel.channels.collectAsState()
+    LaunchedEffect(globalChannels.size) {
+        if (globalChannels.isNotEmpty()) {
+            viewModel.preloadEpgForAllChannels()
+            kotlinx.coroutines.delay(15000)
+            viewModel.preloadEpgForAllChannels()
+        }
+    }
 
 // -----------------------------------------------------------------
 // 屏幕旋转修复：检测方向变化，恢复播放
@@ -637,17 +646,10 @@ viewModel.mpvClearSuppressFileError()
                     }
                 }
             } else {
-                // ---- 非竖屏模式 ----
+                // ---- 横屏模式（手机横屏 + TV横屏统一） ----
 
-                if (landscapeCompact) {
-                    // ---- PHONE 横屏：沉浸式侧边栏布局 ----
-                    LandscapePlayerLayout(
-                        viewModel = viewModel,
-                        primaryPlayer = { primaryPlayer() },
-                        videoAspectRatio = aspectRatio
-                    )
-                } else if (multiViewState.active) {
-                    // ---- TV 多画面模式：沉浸式侧边栏 + 底栏 ----
+                if (multiViewState.active) {
+                    // ---- 多画面模式：沉浸式侧边栏 + 底栏 ----
                     TvPlayerLayout(
                         viewModel = viewModel,
                         primaryPlayer = {
@@ -669,7 +671,7 @@ viewModel.mpvClearSuppressFileError()
                         videoAspectRatio = aspectRatio
                     )
                 } else {
-                    // ---- TV 单画面模式：沉浸式侧边栏 + 底栏 ----
+                    // ---- 单画面模式：酷9风格沉浸式侧边栏 + 底栏 ----
                     TvPlayerLayout(
                         viewModel = viewModel,
                         primaryPlayer = { primaryPlayer() },
@@ -678,12 +680,12 @@ viewModel.mpvClearSuppressFileError()
                 }
             }
 
-        // 主菜单（全屏覆盖）— 仅 PHONE 模式使用
-        if (menuPanelOpen && !uiMode.isTV) {
+        // 主菜单 — PHONE 全屏覆盖 / TV 酷9风格右侧菜单
+        if (menuPanelOpen) {
             MainMenuPanel(viewModel = viewModel)
         }
 
-        // TV 端统一面板（三列：模式切换 + 频道列表/主菜单 + EPG 节目单）
+        // TV 端频道列表（酷9风格左侧面板：分组 + 频道 + EPG + 描述）
         if (tvUnifiedPanelOpen) {
             TvUnifiedPanel(viewModel = viewModel)
         }
@@ -2584,6 +2586,8 @@ private fun PortraitListScreen(
         if (channels.isNotEmpty()) {
             viewModel.preloadEpgForAllChannels()
             viewModel.loadThumbnailPaths()
+            kotlinx.coroutines.delay(15000)
+            viewModel.preloadEpgForAllChannels()
         }
     }
 
